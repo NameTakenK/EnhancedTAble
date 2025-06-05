@@ -1,0 +1,391 @@
+<!-- ✅ filename: enhanced-editable-table.html (Multi-Column Sort Enabled, Full) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Final Editable Table ✅ with Multi-Sort</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 2rem;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    h2 { text-align: center; color: #4f46e5; }
+    .search-box, .message, .info-bar { text-align: center; margin-bottom: 1rem; }
+    .info-bar { font-size: 0.9rem; color: #555; }
+    input[type="text"], input[type="number"] {
+      padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px;
+      margin: 0.25rem; width: 160px;
+    }
+    button {
+      padding: 0.5rem 0.8rem; border: none; background: #4f46e5;
+      color: white; border-radius: 6px; cursor: pointer; margin: 0.25rem;
+    }
+    button:hover { background: #4338ca; }
+    table {
+      width: 100%; border-collapse: collapse; background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-radius: 8px;
+      table-layout: auto; overflow: hidden;
+    }
+    th, td {
+      padding: 0.75rem; border-bottom: 1px solid #e5e7eb;
+      text-align: left; white-space: nowrap; vertical-align: middle;
+    }
+    th {
+      background: #eef2ff; cursor: pointer; user-select: none; position: relative;
+    }
+    th.sorted-asc::after { content: ' ▲'; position: absolute; right: 8px; }
+    th.sorted-desc::after { content: ' ▼'; position: absolute; right: 8px; }
+    th.sorted-asc { background: #dbeafe; }
+    th.sorted-desc { background: #c7d2fe; }
+    tr:hover { background: #fefce8; }
+    td input[type="text"] {
+      width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 0.4rem;
+    }
+    td.editing { background: #fff7ed; }
+    .highlight { background: #fef08a; }
+    .control-panel {
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+      justify-content: center; margin-top: 1rem;
+    }
+    .color-box {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+    @media (max-width: 768px) {
+      .control-panel { flex-direction: column; align-items: stretch; }
+      input[type="text"], input[type="number"] { width: 100%; }
+    }
+    .check-date {
+      font-size: 0.75rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+
+<h2>📋 Final Editable Table</h2>
+<div class="search-box">
+  🔍 <input type="text" id="searchInput" onkeyup="searchTable()" placeholder="Search...">
+  <button onclick="resetChecked()">🔄 Reset Checked</button>
+</div>
+<div class="info-bar"><span id="resultCount"></span></div>
+<div class="message" id="messageBox"></div>
+
+<table id="dataTable">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th onclick="sortTable(1)">Brand</th>
+      <th onclick="sortTable(2)">Category</th>
+      <th onclick="sortTable(3)">Color</th>
+      <th onclick="sortTable(4)">Scheme</th>
+      <th onclick="sortTable(5)">Name</th>
+      <th onclick="sortTable(6)">Quantity</th>
+      <th onclick="sortTable(7)">Description</th>
+      <th>Actions</th>
+      <th>Check</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div class="control-panel">
+  <input type="text" id="brand" placeholder="Brand">
+  <input type="text" id="category" placeholder="Category">
+  <input type="text" id="color" placeholder="#FFFFFF">
+  <input type="text" id="scheme" placeholder="Scheme">
+  <input type="text" id="name" placeholder="Name">
+  <input type="number" id="quantity" placeholder="Quantity">
+  <input type="text" id="description" placeholder="Description">
+  <button onclick="addRow()">➕ Add</button>
+  <button onclick="clearTable()">🧹 Clear All</button>
+</div>
+
+<div class="control-panel">
+  <input type="text" id="filename" placeholder="Filename (e.g. mydata.json)">
+  <button onclick="copyTable()">📋 Copy</button>
+  <button onclick="saveToFile()">💾 Save</button>
+  <button onclick="document.getElementById('fileInput').click()">📂 Load</button>
+  <label><input type="checkbox" id="appendMode"> Append to existing data</label>
+  <input type="file" id="fileInput" accept=".json" style="display: none;" onchange="loadFromFile(event)">
+</div>
+
+<script>
+let rowCount = 0;
+let sortStates = {};
+
+function showMessage(msg, d = 2000) {
+  const b = document.getElementById("messageBox");
+  b.innerText = msg;
+  b.style.display = "block";
+  setTimeout(() => { b.style.display = "none"; }, d);
+}
+
+function clearTable() {
+  document.querySelector("#dataTable tbody").innerHTML = "";
+  rowCount = 0;
+  updateCount();
+  saveRowsToLocal();
+}
+
+function resetChecked() {
+  document.querySelectorAll("#dataTable tbody tr").forEach(row => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    const dateSpan = row.querySelector('.check-date');
+    if (checkbox && checkbox.checked) {
+      checkbox.checked = false;
+      if (dateSpan) dateSpan.innerText = "";
+    }
+  });
+  saveRowsToLocal();
+  showMessage("☑️ All checked items have been reset");
+}
+
+function addRow(data = null) {
+  const fields = ['brand', 'category', 'color', 'scheme', 'name', 'quantity', 'description'];
+  const values = data || fields.map(id => document.getElementById(id).value.trim());
+  if (!data && values.some(v => v === '')) {
+    showMessage("⚠️ Please fill in all fields."); return;
+  }
+  const tbody = document.querySelector("#dataTable tbody");
+  const row = tbody.insertRow();
+  rowCount++;
+  row.insertCell(0).innerText = rowCount;
+
+  for (let i = 0; i < 2; i++) {
+    const cell = row.insertCell(i + 1);
+    cell.innerText = values[i];
+    cell.onclick = () => makeCellEditable(cell);
+  }
+
+  const colorCell = row.insertCell(3);
+  const colorContainer = document.createElement("div");
+  colorContainer.style.display = "flex";
+  colorContainer.style.alignItems = "center";
+  colorContainer.style.gap = "6px";
+
+  const colorBox = document.createElement("div");
+  colorBox.className = "color-box";
+  const hex = values[2] || "#FFFFFF";
+  colorBox.style.backgroundColor = hex;
+  colorBox.title = hex;
+
+  colorBox.addEventListener("click", () => {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = colorBox.title;
+    input.style.width = "80px";
+    input.style.padding = "2px";
+    input.style.fontSize = "0.9rem";
+    input.style.border = "1px solid #ccc";
+    input.style.borderRadius = "4px";
+    const revertBox = () => colorContainer.replaceChild(colorBox, input);
+    input.addEventListener("blur", () => {
+      const val = input.value.trim();
+      if (/^#([0-9a-fA-F]{6})$/.test(val)) {
+        colorBox.style.backgroundColor = val;
+        colorBox.title = val;
+        saveRowsToLocal();
+      }
+      revertBox();
+    });
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") input.blur();
+      if (e.key === "Escape") revertBox();
+    });
+    colorContainer.replaceChild(input, colorBox);
+    input.focus();
+  });
+
+  const copyBtn = document.createElement("span");
+  copyBtn.textContent = "📋";
+  copyBtn.style.cursor = "pointer";
+  copyBtn.title = "Copy HEX";
+  copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText(colorBox.title);
+    showMessage("🎨 Copied: " + colorBox.title);
+  });
+
+  colorContainer.appendChild(colorBox);
+  colorContainer.appendChild(copyBtn);
+  colorCell.appendChild(colorContainer);
+
+  for (let i = 3; i < 7; i++) {
+    const cell = row.insertCell(i + 1);
+    cell.innerText = values[i];
+    cell.onclick = () => makeCellEditable(cell);
+  }
+
+  const act = row.insertCell(8);
+  const del = document.createElement("button");
+  del.innerText = "🗑️ Delete";
+  del.style.background = "#dc2626";
+  del.onclick = () => { row.remove(); updateNumbers(); saveRowsToLocal(); };
+  act.appendChild(del);
+
+  const chk = row.insertCell(9);
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  const dateSpan = document.createElement("div");
+  dateSpan.className = "check-date";
+  checkbox.addEventListener("change", () => {
+    dateSpan.innerText = checkbox.checked ? new Date().toLocaleString() : "";
+    saveRowsToLocal();
+  });
+  chk.appendChild(checkbox); chk.appendChild(dateSpan);
+
+  if (!data) fields.forEach(id => document.getElementById(id).value = '');
+  updateCount();
+  saveRowsToLocal();
+}
+
+function updateNumbers() {
+  const rows = document.querySelectorAll("#dataTable tbody tr");
+  rowCount = 0;
+  rows.forEach((r, i) => { r.cells[0].innerText = ++rowCount; });
+  updateCount();
+}
+
+function makeCellEditable(cell) {
+  if (cell.cellIndex <= 0 || cell.cellIndex >= 8) return;
+  if (cell.querySelector("input")) return;
+  const old = cell.innerText;
+  cell.classList.add("editing");
+  const input = document.createElement("input");
+  input.type = "text"; input.value = old;
+  cell.innerText = ""; cell.appendChild(input); input.focus();
+  const save = () => {
+    cell.innerText = input.value.trim();
+    cell.classList.remove("editing");
+    saveRowsToLocal();
+  };
+  input.addEventListener("blur", save);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") save();
+    if (e.key === "Escape") { cell.innerText = old; cell.classList.remove("editing"); }
+  });
+}
+
+function sortTable(colIndex) {
+  const tbody = document.querySelector("#dataTable tbody");
+  const rows = Array.from(tbody.querySelectorAll("tr"));
+  const isNumeric = colIndex === 6;
+
+  const current = sortStates[colIndex] || 'none';
+  const newOrder = current === 'asc' ? 'desc' : 'asc';
+  sortStates[colIndex] = newOrder;
+
+  document.querySelectorAll("th").forEach((th, i) => {
+    th.classList.remove("sorted-asc", "sorted-desc");
+    if (sortStates[i] === "asc") th.classList.add("sorted-asc");
+    if (sortStates[i] === "desc") th.classList.add("sorted-desc");
+  });
+
+  const activeSorts = Object.entries(sortStates).filter(([_, dir]) => dir !== 'none');
+  rows.sort((a, b) => {
+    for (const [idx, dir] of activeSorts) {
+      const i = parseInt(idx);
+      const aVal = a.cells[i].innerText.trim();
+      const bVal = b.cells[i].innerText.trim();
+      const cmp = isNumeric ? Number(aVal) - Number(bVal) : aVal.localeCompare(bVal);
+      if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+    }
+    return 0;
+  });
+
+  rows.forEach(r => tbody.appendChild(r));
+  updateNumbers();
+}
+
+function searchTable() {
+  const k = document.getElementById("searchInput").value.toLowerCase();
+  const rows = document.querySelectorAll("#dataTable tbody tr");
+  let count = 0;
+  rows.forEach(r => {
+    let match = false;
+    for (let i = 1; i <= 7; i++) {
+      if (r.cells[i].innerText.toLowerCase().includes(k)) {
+        match = true; break;
+      }
+    }
+    r.style.display = match ? "" : "none";
+    if (match) count++;
+  });
+  document.getElementById("resultCount").innerText = `Showing ${count} result(s).`;
+}
+
+function updateCount() {
+  const rows = document.querySelectorAll("#dataTable tbody tr");
+  document.getElementById("resultCount").innerText = `Total ${rows.length} row(s).`;
+}
+
+function saveRowsToLocal() {
+  const rows = [...document.querySelectorAll("#dataTable tbody tr")].map(r => {
+    const cells = r.querySelectorAll("td");
+    const checkbox = cells[9].querySelector("input");
+    const checkDate = cells[9].querySelector(".check-date").innerText;
+    const color = cells[3].querySelector(".color-box").title;
+    return [
+      cells[1].innerText, cells[2].innerText, color,
+      cells[4].innerText, cells[5].innerText, cells[6].innerText, cells[7].innerText,
+      checkbox.checked, checkDate
+    ];
+  });
+  localStorage.setItem("editableTableData", JSON.stringify(rows));
+}
+
+function loadRowsFromLocal() {
+  const data = JSON.parse(localStorage.getItem("editableTableData") || "[]");
+  data.forEach(addRow);
+}
+
+function saveToFile() {
+  const data = JSON.parse(localStorage.getItem("editableTableData") || "[]");
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const f = document.getElementById("filename").value.trim() || "table-data.json";
+  a.download = f.endsWith(".json") ? f : f + ".json";
+  a.click(); showMessage("✅ Saved: " + a.download);
+}
+
+function loadFromFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = JSON.parse(e.target.result);
+    if (!document.getElementById("appendMode").checked) {
+      clearTable();
+    }
+    data.forEach(addRow);
+    showMessage("📂 Data loaded");
+  };
+  reader.readAsText(file);
+}
+
+function copyTable() {
+  const rows = document.querySelectorAll("#dataTable tbody tr");
+  const text = [...rows].map(r =>
+    [...r.children].slice(1, 8).map(c => c.innerText).join('\t')
+  ).join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    showMessage("📋 Copied!");
+  });
+}
+
+document.getElementById("description").addEventListener("keydown", e => {
+  if (e.key === "Enter") addRow();
+});
+
+window.addEventListener("load", loadRowsFromLocal);
+</script>
+
+</body>
+</html>

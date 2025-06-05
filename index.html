@@ -1,9 +1,9 @@
-<!-- ✅ filename: enhanced-editable-table.html (Multi-Column Sort Enabled, Full) -->
+<!-- ✅ filename: enhanced-editable-table.html (Auto-load table-data.json if exists) -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Final Editable Table ✅ with Multi-Sort</title>
+  <title>Final Editable Table ✅ with Multi-Sort & Auto Load</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -245,13 +245,6 @@ function addRow(data = null) {
   saveRowsToLocal();
 }
 
-function updateNumbers() {
-  const rows = document.querySelectorAll("#dataTable tbody tr");
-  rowCount = 0;
-  rows.forEach((r, i) => { r.cells[0].innerText = ++rowCount; });
-  updateCount();
-}
-
 function makeCellEditable(cell) {
   if (cell.cellIndex <= 0 || cell.cellIndex >= 8) return;
   if (cell.querySelector("input")) return;
@@ -276,7 +269,6 @@ function sortTable(colIndex) {
   const tbody = document.querySelector("#dataTable tbody");
   const rows = Array.from(tbody.querySelectorAll("tr"));
   const isNumeric = colIndex === 6;
-
   const current = sortStates[colIndex] || 'none';
   const newOrder = current === 'asc' ? 'desc' : 'asc';
   sortStates[colIndex] = newOrder;
@@ -341,8 +333,25 @@ function saveRowsToLocal() {
 }
 
 function loadRowsFromLocal() {
-  const data = JSON.parse(localStorage.getItem("editableTableData") || "[]");
-  data.forEach(addRow);
+  const localData = localStorage.getItem("editableTableData");
+  if (localData) {
+    const data = JSON.parse(localData);
+    data.forEach(addRow);
+    showMessage("✅ Loaded from localStorage");
+  } else {
+    fetch("table-data.json")
+      .then(response => {
+        if (!response.ok) throw new Error("No file");
+        return response.json();
+      })
+      .then(data => {
+        data.forEach(addRow);
+        showMessage("📂 Loaded table-data.json");
+      })
+      .catch(() => {
+        showMessage("⚠️ No data to load");
+      });
+  }
 }
 
 function saveToFile() {
